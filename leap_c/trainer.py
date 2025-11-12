@@ -8,12 +8,12 @@ import numpy as np
 import torch
 from yaml import safe_dump
 
+from leap_c.controller import CtxType
 from leap_c.torch.utils.seed import set_seed
 from leap_c.utils.gym import WrapperType, wrap_env
 from leap_c.utils.logger import Logger, LoggerConfig
 from leap_c.utils.rollout import episode_rollout
 
-TrainerConfigType = TypeVar("TrainerConfigType", bound="TrainerConfig")
 ValReportScoreOptions = Literal["cum", "final", "best"]
 
 
@@ -63,6 +63,9 @@ class TrainerConfig:
     log: LoggerConfig = field(default_factory=LoggerConfig)
 
 
+TrainerConfigType = TypeVar("TrainerConfigType", bound=TrainerConfig)
+
+
 @dataclass(kw_only=True)
 class TrainerState:
     """The state of a trainer.
@@ -78,7 +81,7 @@ class TrainerState:
     max_score: float = float("-inf")
 
 
-class Trainer(ABC, torch.nn.Module, Generic[TrainerConfigType]):
+class Trainer(ABC, torch.nn.Module, Generic[TrainerConfigType, CtxType]):
     """A trainer provides the implementation of an algorithm.
 
     It is responsible for training the components of the algorithm and
@@ -156,8 +159,8 @@ class Trainer(ABC, torch.nn.Module, Generic[TrainerConfigType]):
 
     @abstractmethod
     def act(
-        self, obs: np.ndarray, deterministic: bool = False, state: Any | None = None
-    ) -> tuple[np.ndarray, Any | None, dict[str, float] | None]:
+        self, obs: np.ndarray, deterministic: bool = False, state: CtxType | None = None
+    ) -> tuple[np.ndarray, CtxType | None, dict[str, float] | None]:
         """Act based on the observation.
 
         This is intended for rollouts (= interaction with the environment).
@@ -208,40 +211,38 @@ class Trainer(ABC, torch.nn.Module, Generic[TrainerConfigType]):
                 f"but has to be one of {get_args(ValReportScoreOptions)}"
             )
 
-        self.to(self.device)
+        with self.logger:
+            self.to(self.device)
+            train_loop_iter = self.train_loop()
 
-        train_loop_iter = self.train_loop()
+            # initial policy validation
+            self.eval()  # set to eval mode
+            with torch.inference_mode():
+                val_score = self.validate()
+            self.train()  # set back to train mode
+            self.state.scores.append(val_score)
+            self.state.max_score = val_score
 
-        # initial policy validation
-        self.eval()  # set to eval mode
-        with torch.inference_mode():
-            val_score = self.validate()
-        self.train()  # set back to train mode
-        self.state.scores.append(val_score)
-        self.state.max_score = val_score
+            while self.state.step < self.cfg.train_steps:
+                # train
+                self.state.step += next(train_loop_iter)
 
-        while self.state.step < self.cfg.train_steps:
-            # train
-            self.state.step += next(train_loop_iter)
+                # validate
+                if self.state.step // self.cfg.val_freq >= len(self.state.scores):
+                    self.eval()  # set to eval mode
+                    with torch.inference_mode():
+                        val_score = self.validate()
+                    self.train()  # set back to train mode
+                    self.state.scores.append(val_score)
 
-            # validate
-            if self.state.step // self.cfg.val_freq >= len(self.state.scores):
-                self.eval()  # set to eval mode
-                with torch.inference_mode():
-                    val_score = self.validate()
-                self.train()  # set back to train mode
-                self.state.scores.append(val_score)
+                    if val_score > self.state.max_score:
+                        self.state.max_score = val_score
+                        if self.cfg.ckpt_modus == "best":
+                            self.save()
 
-                if val_score > self.state.max_score:
-                    self.state.max_score = val_score
-                    if self.cfg.ckpt_modus == "best":
+                    # save model
+                    if self.cfg.ckpt_modus in ("last", "all"):
                         self.save()
-
-                # save model
-                if self.cfg.ckpt_modus in ("last", "all"):
-                    self.save()
-
-        self.logger.close()
 
         match self.cfg.val_report_score:
             case "cum":
@@ -265,7 +266,7 @@ class Trainer(ABC, torch.nn.Module, Generic[TrainerConfigType]):
         """
 
         def create_policy_fn():
-            policy_state = None
+            policy_state: CtxType | None = None
 
             def policy_fn(obs):
                 nonlocal policy_state

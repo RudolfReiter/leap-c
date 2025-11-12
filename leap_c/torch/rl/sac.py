@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Generator, Type
+from typing import Any, Generator, Type
 
 import gymnasium as gym
 import gymnasium.spaces as spaces
@@ -44,7 +44,6 @@ class SacTrainerConfig(TrainerConfig):
             If `None`, it is set automatically depending on dimensions of the action space.
         entropy_reward_bonus: Whether to add an entropy bonus to the reward.
         num_critics: The number of critic networks.
-        report_loss_freq: The frequency of reporting the loss (in steps).
         update_freq: The frequency of updating the networks (in steps).
         distribution_name: The type of bounded distribution to use
             for sampling inside the policy.
@@ -64,7 +63,6 @@ class SacTrainerConfig(TrainerConfig):
     target_entropy: float | None = None
     entropy_reward_bonus: bool = True
     num_critics: int = 2
-    report_loss_freq: int = 100
     update_freq: int = 4
     distribution_name: BoundedDistributionName = "squashed_gaussian"
 
@@ -102,24 +100,20 @@ class SacCritic(nn.Module):
         """
         super().__init__()
 
-        action_dim = action_space.shape[0]  # type: ignore
+        action_dim = action_space.shape[0]
 
         self.extractor = nn.ModuleList(extractor_cls(observation_space) for _ in range(num_critics))
         self.mlp = nn.ModuleList(
             [
-                Mlp(
-                    input_sizes=[qe.output_size, action_dim],  # type: ignore
-                    output_sizes=1,
-                    mlp_cfg=mlp_cfg,
-                )
+                Mlp(input_sizes=[qe.output_size, action_dim], output_sizes=1, mlp_cfg=mlp_cfg)
                 for qe in self.extractor
             ]
         )
         self.action_space = action_space
 
-    def forward(self, x: torch.Tensor, a: torch.Tensor):
+    def forward(self, x: torch.Tensor, a: torch.Tensor) -> list[torch.Tensor]:
         """Returns a list of Q-value estimates for the given state-action pairs."""
-        a_norm = min_max_scaling(a, self.action_space)  # type: ignore
+        a_norm = min_max_scaling(a, self.action_space)
         return [mlp(qe(x), a_norm) for qe, mlp in zip(self.extractor, self.mlp)]
 
 
@@ -156,7 +150,7 @@ class SacActor(nn.Module):
         """
         super().__init__()
 
-        action_dim = action_space.shape[0]  # type: ignore
+        action_dim = action_space.shape[0]
 
         self.extractor = extractor_cls(observation_space)
         self.bounded_distribution = get_bounded_distribution(distribution_name, space=action_space)
@@ -190,7 +184,7 @@ class SacActor(nn.Module):
         return action, log_prob, stats
 
 
-class SacTrainer(Trainer[SacTrainerConfig]):
+class SacTrainer(Trainer[SacTrainerConfig, Any]):
     """A trainer for Soft Actor-Critic (SAC).
 
     Attributes:
@@ -241,25 +235,17 @@ class SacTrainer(Trainer[SacTrainerConfig]):
         super().__init__(cfg, val_env, output_path, device)
 
         self.train_env = wrap_env(train_env)
-        action_space: spaces.Box = self.train_env.action_space  # type: ignore
+        action_space: spaces.Box = self.train_env.action_space
         observation_space = self.train_env.observation_space
 
         if isinstance(extractor_cls, str):
             extractor_cls = get_extractor_cls(extractor_cls)
 
         self.q = SacCritic(
-            extractor_cls,  # type: ignore
-            action_space,
-            observation_space,
-            cfg.critic_mlp,
-            cfg.num_critics,
+            extractor_cls, action_space, observation_space, cfg.critic_mlp, cfg.num_critics
         )
         self.q_target = SacCritic(
-            extractor_cls,  # type: ignore
-            action_space,
-            observation_space,
-            cfg.critic_mlp,
-            cfg.num_critics,
+            extractor_cls, action_space, observation_space, cfg.critic_mlp, cfg.num_critics
         )
         self.q_target.load_state_dict(self.q.state_dict())
         self.q_optim = torch.optim.Adam(self.q.parameters(), lr=cfg.lr_q)
@@ -270,14 +256,14 @@ class SacTrainer(Trainer[SacTrainerConfig]):
             observation_space,
             cfg.distribution_name,
             cfg.actor_mlp,
-        )  # type: ignore
+        )
         self.pi_optim = torch.optim.Adam(self.pi.parameters(), lr=cfg.lr_pi)
 
-        self.log_alpha = nn.Parameter(torch.tensor(cfg.init_alpha).log())  # type: ignore
+        self.log_alpha = nn.Parameter(torch.tensor(cfg.init_alpha).log())
 
         if self.cfg.lr_alpha is not None:
-            self.alpha_optim = torch.optim.Adam([self.log_alpha], lr=cfg.lr_alpha)  # type: ignore
-            action_dim = np.prod(self.train_env.action_space.shape)  # type: ignore
+            self.alpha_optim = torch.optim.Adam([self.log_alpha], lr=cfg.lr_alpha)
+            action_dim = np.prod(self.train_env.action_space.shape)
             self.target_entropy = -action_dim if cfg.target_entropy is None else cfg.target_entropy
         else:
             self.alpha_optim = None
@@ -293,17 +279,17 @@ class SacTrainer(Trainer[SacTrainerConfig]):
                 obs, _ = seed_env(self.train_env, mk_seed(self.rng))
                 is_terminated = is_truncated = False
 
-            action, _, stats = self.act(obs)  # type: ignore
+            action, _, stats = self.act(obs)
             self.report_stats("train_trajectory", {"action": action}, verbose=True)
-            self.report_stats("train_policy_rollout", stats, verbose=True)  # type: ignore
+            self.report_stats("train_policy_rollout", stats, verbose=True)
 
             obs_prime, reward, is_terminated, is_truncated, info = self.train_env.step(action)
 
             if "episode" in info or "task" in info:
-                self.report_stats("train", {**info.get("episode", {}), **info.get("task", {})})
+                self.report_stats("train", info.get("episode", {}) | info.get("task", {}))
 
             # TODO (Jasper): Add is_truncated to buffer.
-            self.buffer.put((obs, action, reward, obs_prime, is_terminated))  # type: ignore
+            self.buffer.put((obs, action, reward, obs_prime, is_terminated))
 
             obs = obs_prime
 
@@ -373,7 +359,7 @@ class SacTrainer(Trainer[SacTrainerConfig]):
             yield 1
 
     def act(
-        self, obs, deterministic: bool = False, state=None
+        self, obs, deterministic: bool = False, state: Any = None
     ) -> tuple[np.ndarray, None, dict[str, float]]:
         obs = self.buffer.collate([obs])
         with torch.no_grad():

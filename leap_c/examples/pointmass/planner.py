@@ -2,16 +2,16 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-import numpy as np
+import torch
 
 from leap_c.examples.pointmass.acados_ocp import (
     PointMassAcadosParamInterface,
     create_pointmass_params,
     export_parametric_ocp,
 )
-from leap_c.ocp.acados.controller import AcadosController
 from leap_c.ocp.acados.parameters import AcadosParameter, AcadosParameterManager
-from leap_c.ocp.acados.torch import AcadosDiffMpcTorch
+from leap_c.ocp.acados.planner import AcadosPlanner
+from leap_c.ocp.acados.torch import AcadosDiffMpcCtx, AcadosDiffMpcTorch
 
 
 @dataclass(kw_only=True)
@@ -31,13 +31,14 @@ class PointMassControllerConfig:
     param_interface: PointMassAcadosParamInterface = "global"
 
 
-class PointMassController(AcadosController):
-    """Acados-based controller for the PointMass system.
-    The state corresponds to the observation of the PointMass environment, without the wind force.
-    The cost function takes a weighted least-squares form,
-    and the dynamics correspond to the ones in the environment, but without the wind force.
-    The inequality constraints are box constraints on the action (hard)
-    and on the position of the ball, the latter representing the bounds of the world (soft/slacked).
+class PointMassPlanner(AcadosPlanner[AcadosDiffMpcCtx]):
+    """Acados-based controller for the `PointMass` system.
+
+    The state corresponds to the observation of the `PointMass` environment, without the wind force.
+    The cost function takes a weighted least-squares form, and the dynamics correspond to the ones
+    in the environment, but without the wind force. The inequality constraints are box constraints
+    on the action (hard) and on the position of the ball, the latter representing the bounds of the
+    world (soft/slacked).
 
     Attributes:
         cfg: A configuration object containing high-level settings for the MPC problem,
@@ -86,12 +87,13 @@ class PointMassController(AcadosController):
         diff_mpc = AcadosDiffMpcTorch(ocp, export_directory=export_directory)
         super().__init__(param_manager=param_manager, diff_mpc=diff_mpc)
 
-    def forward(self, obs, param, ctx=None) -> tuple[Any, np.ndarray]:
+    def forward(
+        self, obs, action=None, param=None, ctx=None
+    ) -> tuple[Any, torch.Tensor, torch.Tensor, torch.Tensor | None]:
         p_stagewise = self.param_manager.combine_non_learnable_parameter_values(
             batch_size=obs.shape[0]
         )
         # remove wind field from observation, this is only observed by
         # the network, not used in the MPC
         x0 = obs[:, :4]
-        ctx, u0, x, u, value = self.diff_mpc(x0, p_global=param, p_stagewise=p_stagewise, ctx=ctx)
-        return ctx, u0
+        return self.diff_mpc(x0, p_global=param, p_stagewise=p_stagewise, ctx=ctx)
