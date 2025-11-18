@@ -109,7 +109,7 @@ if __name__ == "__main__":
     parser.add_argument("--output_path", type=Path, default=None)
     parser.add_argument("--device", type=str, default="cpu")
     parser.add_argument("--seed", type=int, default=0)
-    parser.add_argument("--env", type=str, default="cartpole")
+    parser.add_argument("--env", type=str, default="drone")
     parser.add_argument("--controller", type=str, default=None)
     parser.add_argument(
         "-r",

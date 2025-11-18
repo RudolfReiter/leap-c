@@ -6,6 +6,9 @@ from typing import Any, Literal, TypeAlias
 
 from gymnasium import Env
 
+from diffmpc.controller.default_params import model_params_default, mpc_config_default
+from diffmpc.controller.mpc_diff import QuadrotorDiffMpc
+from diffmpc.environments.perception_tracking_env import PerceptionTrackingDroneEnv
 from leap_c.controller import CtxType, ParameterizedController
 from leap_c.examples.cartpole.env import CartPoleEnv
 from leap_c.examples.cartpole.planner import CartPolePlanner, CartPolePlannerConfig
@@ -17,12 +20,13 @@ from leap_c.examples.pointmass.env import PointMassEnv
 from leap_c.examples.pointmass.planner import PointMassControllerConfig, PointMassPlanner
 from leap_c.planner import ControllerFromPlanner, ParameterizedPlanner
 
-ExampleEnvName = Literal["cartpole", "chain", "pointmass", "hvac"]
+ExampleEnvName = Literal["cartpole", "chain", "pointmass", "hvac", "drone"]
 ENV_REGISTRY = {
     "cartpole": CartPoleEnv,
     "chain": ChainEnv,
     "pointmass": PointMassEnv,
     "hvac": StochasticThreeStateRcEnv,
+    "drone": PerceptionTrackingDroneEnv,
 }
 
 
@@ -63,6 +67,7 @@ PLANNER_REGISTRY = {
     ),
     "hvac": HvacController,
     "hvac_stagewise": partial(HvacController, stagewise=True),
+    "drone": (QuadrotorDiffMpc,model_params_default, mpc_config_default)
 }
 ExamplePlannerName = Literal[
     "cartpole",
@@ -73,6 +78,7 @@ ExamplePlannerName = Literal[
     "pointmass_stagewise",
     "hvac",
     "hvac_stagewise",
+    "drone",
 ]
 
 
@@ -95,6 +101,9 @@ def create_planner(
     # TODO: Remove this distinction when hvac provides the same interface as the other examples
     if planner_name == "hvac" or planner_name == "hvac_stagewise":
         planner_class = PLANNER_REGISTRY[planner_name]
+    elif planner_name == "drone":
+        planner_class, model_params, mpc_config = PLANNER_REGISTRY[planner_name]
+        return planner_class(model_params=model_params, mpc_config=mpc_config)
     else:
         planner_class, config_class, default_cfg_kwargs = PLANNER_REGISTRY[planner_name]
         cfg = config_class(**{**default_cfg_kwargs, **kw})
