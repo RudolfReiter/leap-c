@@ -462,7 +462,8 @@ class SacFopTrainer(Trainer[SacFopTrainerConfig, CtxType], Generic[CtxType]):
 
                 # Only use samples where the MPC solver was successful for both
                 # current and next action.
-                mask_status = (pi_o.status == 0) & (pi_o_prime.status == 0)
+                mask_status = ((pi_o.status == 0) | (pi_o.status == 2)) & \
+                              ((pi_o_prime.status == 0) | (pi_o_prime.status == 2))
                 o = o[mask_status]
                 a = a[mask_status]
                 r = r[mask_status]

@@ -29,9 +29,9 @@ def create_cfg(env: str, controller: str, seed: int) -> RunSacZopConfig:
 
     # ---- Section: cfg.trainer ----
     cfg.trainer.seed = seed
-    cfg.trainer.train_steps = 1_000_000 if env == "pointmass" else 200_000
+    cfg.trainer.train_steps = 200_000
     cfg.trainer.train_start = 0
-    cfg.trainer.val_freq = 10_000
+    cfg.trainer.val_freq = 1_000
     cfg.trainer.val_num_rollouts = 20
     cfg.trainer.val_deterministic = True
     cfg.trainer.val_num_render_rollouts = 0
@@ -56,7 +56,7 @@ def create_cfg(env: str, controller: str, seed: int) -> RunSacZopConfig:
 
     # ---- Section: cfg.trainer.log ----
     cfg.trainer.log.verbose = True
-    cfg.trainer.log.interval = 1_000
+    cfg.trainer.log.interval = 500
     cfg.trainer.log.window = 10_000
     cfg.trainer.log.csv_logger = True
     cfg.trainer.log.tensorboard_logger = True
@@ -64,12 +64,12 @@ def create_cfg(env: str, controller: str, seed: int) -> RunSacZopConfig:
     cfg.trainer.log.wandb_init_kwargs = {}
 
     # ---- Section: cfg.trainer.critic_mlp ----
-    cfg.trainer.critic_mlp.hidden_dims = (256, 256, 256)
+    cfg.trainer.critic_mlp.hidden_dims = (64,64)
     cfg.trainer.critic_mlp.activation = "relu"
     cfg.trainer.critic_mlp.weight_init = "orthogonal"
 
     # ---- Section: cfg.trainer.actor_mlp ----
-    cfg.trainer.actor_mlp.hidden_dims = (256, 256, 256)
+    cfg.trainer.actor_mlp.hidden_dims = (64,64)
     cfg.trainer.actor_mlp.activation = "relu"
     cfg.trainer.actor_mlp.weight_init = "orthogonal"
 
