@@ -45,8 +45,8 @@ def create_cfg(env: str, controller: str, seed: int) -> RunSacZopConfig:
     cfg.trainer.soft_update_freq = 1
     cfg.trainer.lr_q = 0.001
     cfg.trainer.lr_pi = 0.001
-    cfg.trainer.lr_alpha = 0.001
-    cfg.trainer.init_alpha = 0.2
+    cfg.trainer.lr_alpha = 0.000
+    cfg.trainer.init_alpha = 0.1
     cfg.trainer.target_entropy = None
     cfg.trainer.entropy_reward_bonus = True
     cfg.trainer.num_critics = 2
