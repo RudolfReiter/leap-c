@@ -17,7 +17,7 @@ class RunSacZopConfig:
     env: ExampleEnvName = "cartpole"
     controller: ExampleControllerName = "cartpole"
     trainer: SacZopTrainerConfig = field(default_factory=SacZopTrainerConfig)
-    extractor: ExtractorName = "identity"
+    extractor: ExtractorName = "drone"
 
 
 def create_cfg(env: str, controller: str, seed: int) -> RunSacZopConfig:
@@ -25,13 +25,13 @@ def create_cfg(env: str, controller: str, seed: int) -> RunSacZopConfig:
     cfg = RunSacZopConfig()
     cfg.env = env
     cfg.controller = controller if controller is not None else env
-    cfg.extractor = "identity" if env != "hvac" else "scaling"
+    cfg.extractor = "drone" #"identity"
 
     # ---- Section: cfg.trainer ----
     cfg.trainer.seed = seed
     cfg.trainer.train_steps = 200_000
     cfg.trainer.train_start = 0
-    cfg.trainer.val_freq = 5_000
+    cfg.trainer.val_freq = 20_000
     cfg.trainer.val_num_rollouts = 5
     cfg.trainer.val_deterministic = True
     cfg.trainer.val_num_render_rollouts = 1
@@ -46,7 +46,7 @@ def create_cfg(env: str, controller: str, seed: int) -> RunSacZopConfig:
     cfg.trainer.lr_q = 0.001
     cfg.trainer.lr_pi = 0.001
     cfg.trainer.lr_alpha = 0.001
-    cfg.trainer.init_alpha = 0.02
+    cfg.trainer.init_alpha = 0.2
     cfg.trainer.target_entropy = None
     cfg.trainer.entropy_reward_bonus = True
     cfg.trainer.num_critics = 2
