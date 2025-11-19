@@ -118,7 +118,7 @@ def get_input_dims(dim_nx: int, dim_nref: int, dim_nfeat: int) -> dict[str, int]
 
 
 class QuadrotorExtractor(Extractor):
-    def __init__(self, observation_space: gym.spaces.Box, dim_nx: int = 17, dim_nref: int = 101,
+    def __init__(self, observation_space: gym.spaces.Box, dim_nx: int = 17, dim_nref: int = 51,
                  dim_nfeat: int = 20) -> None:
         """Initializes the extractor.
 
