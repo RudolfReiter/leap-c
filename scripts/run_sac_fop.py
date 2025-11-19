@@ -25,7 +25,7 @@ class RunSacFopConfig:
     env: ExampleEnvName = "cartpole"
     controller: ExampleControllerName = "cartpole"
     trainer: SacFopTrainerConfig = field(default_factory=SacFopTrainerConfig)
-    extractor: ExtractorName = "identity"
+    extractor: ExtractorName = "drone"
 
 
 def create_cfg(env: str, controller: str, seed: int) -> RunSacFopConfig:
@@ -37,12 +37,12 @@ def create_cfg(env: str, controller: str, seed: int) -> RunSacFopConfig:
 
     # ---- Section: cfg.trainer ----
     cfg.trainer.seed = seed
-    cfg.trainer.train_steps = 200_000
+    cfg.trainer.train_steps = 1_000_000
     cfg.trainer.train_start = 0
-    cfg.trainer.val_freq = 1_000
-    cfg.trainer.val_num_rollouts = 20
+    cfg.trainer.val_freq = 100_000
+    cfg.trainer.val_num_rollouts = 5
     cfg.trainer.val_deterministic = True
-    cfg.trainer.val_num_render_rollouts = 0
+    cfg.trainer.val_num_render_rollouts = 1
     cfg.trainer.val_render_mode = "rgb_array"
     cfg.trainer.val_report_score = "cum"
     cfg.trainer.ckpt_modus = "best"
@@ -54,7 +54,7 @@ def create_cfg(env: str, controller: str, seed: int) -> RunSacFopConfig:
     cfg.trainer.lr_q = 0.001
     cfg.trainer.lr_pi = 0.001
     cfg.trainer.lr_alpha = 0.001
-    cfg.trainer.init_alpha = 0.02
+    cfg.trainer.init_alpha = 0.2
     cfg.trainer.target_entropy = None
     cfg.trainer.entropy_reward_bonus = True
     cfg.trainer.num_critics = 2
