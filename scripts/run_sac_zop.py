@@ -40,13 +40,13 @@ def create_cfg(env: str, controller: str, seed: int) -> RunSacZopConfig:
     cfg.trainer.ckpt_modus = "best"
     cfg.trainer.batch_size = 64
     cfg.trainer.buffer_size = 1_000_000
-    cfg.trainer.gamma = 0.99
+    cfg.trainer.gamma = 0.995
     cfg.trainer.tau = 0.005
     cfg.trainer.soft_update_freq = 1
     cfg.trainer.lr_q = 0.001
     cfg.trainer.lr_pi = 0.001
-    cfg.trainer.lr_alpha = 0.000
-    cfg.trainer.init_alpha = 0.025
+    cfg.trainer.lr_alpha = 0.0005
+    cfg.trainer.init_alpha = 0.02
     cfg.trainer.target_entropy = None
     cfg.trainer.entropy_reward_bonus = True
     cfg.trainer.num_critics = 2
