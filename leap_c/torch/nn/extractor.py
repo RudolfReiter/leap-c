@@ -13,6 +13,7 @@ import torch.nn as nn
 from leap_c.torch.nn.custom import TrajectoryTCN, flatten_and_concat
 from leap_c.torch.nn.deepset import DeepSetLayer
 from leap_c.torch.nn.scale import min_max_scaling
+from leap_c.torch.nn.simple_rnn import SimpleRNNEncoder
 
 
 class Extractor(nn.Module, ABC):
@@ -100,6 +101,7 @@ ExtractorName = Literal["identity", "scaling"]
 def get_input_dims(dim_nx: int, dim_nref: int, dim_nfeat: int) -> dict[str, int]:
     dims = {}
     dims['nx'] = dim_nx
+    dims['nu'] = 4
     dims['ref'] = 3
     dims['nref'] = dim_nref
     dims['nref_flat'] = dims['ref'] * dim_nref  # 3 positions per step
@@ -108,18 +110,19 @@ def get_input_dims(dim_nx: int, dim_nref: int, dim_nfeat: int) -> dict[str, int]
     dims['nfeat'] = dim_nfeat
     dims['nfeat_flat'] = dims['feat'] * dim_nfeat
 
-    dims['n_total'] = dims['nx'] + dims['nref_flat'] + dims['nfeat_flat'] + dims['cov'] + dims['nfeat']
+    dims['n_total'] = dims['nx'] + dims['nref_flat'] + dims['nfeat_flat'] + dims['cov'] + dims['nfeat'] + dims['nu']
     dims['idxs_state'] = slice(0, dims['nx'])
     dims['idxs_ref'] = slice(dims['nx'], dims['nx'] + dims['nref_flat'])
     dims['idxs_cov'] = slice(dims['nx'] + dims['nref_flat'], dims['nx'] + dims['nref_flat'] + dims['cov'])
-    dims['idxs_feat'] = slice(dims['nx'] + dims['nref_flat'] + dims['cov'], dims['n_total'] - dims['nfeat'])
-    dims['idxs_feat_valid'] = slice(dims['n_total'] - dims['nfeat'], dims['n_total'])
+    dims['idxs_feat'] = slice(dims['nx'] + dims['nref_flat'] + dims['cov'], dims['n_total'] - dims['nfeat']-dims['nu'])
+    dims['idxs_feat_valid'] = slice(dims['n_total'] - dims['nfeat'] -dims['nu'], dims['n_total']-dims['nu'])
+    dims['idxs_action'] = slice(dims['n_total'] - dims['nu'], dims['n_total'])
     return dims
 
 
 class QuadrotorExtractor(Extractor):
     def __init__(self, observation_space: gym.spaces.Box, dim_nx: int = 17, dim_nref: int = 51,
-                 dim_nfeat: int = 20) -> None:
+                 dim_nfeat: int = 30) -> None:
         """Initializes the extractor.
 
         Args:
@@ -131,7 +134,9 @@ class QuadrotorExtractor(Extractor):
         embedded_dim = 16
         self.trajectory_tcn = TrajectoryTCN(embed_dim=embedded_dim)
         self.deep_set = DeepSetLayer(out_dim=embedded_dim)
-        self.output_dim = self.dims['nx'] + self.dims['cov'] + 2*embedded_dim
+        self.output_dim = self.dims['nx'] + self.dims['cov'] + 3*embedded_dim
+        self.encoder = SimpleRNNEncoder(hidden_size=embedded_dim)
+        self.x_hidden = None
 
         # if len(observation_space.shape) != 1:  # type: ignore
         #    raise ValueError("QuadrotorExtractor only supports 1D observations.")
@@ -150,6 +155,7 @@ class QuadrotorExtractor(Extractor):
         y_cov = x[:, self.dims['idxs_cov']]
         x_feat = x[:, self.dims['idxs_feat']].reshape(x.shape[0], self.dims['nfeat'], self.dims['feat'])
         x_feat_valid = x[:, self.dims['idxs_feat_valid']]
+        x_action = x[:, self.dims['idxs_action']]
 
         x_ref_rel = x_ref - y_state[:, :3].unsqueeze(1)  # relative to ego position
         y_traj = self.trajectory_tcn(x_ref_rel)
@@ -161,7 +167,9 @@ class QuadrotorExtractor(Extractor):
         x_feat_diff = quaternion_difference_ego_to_vectors(x_quat, x_vec_ego2feat)
         y_feat_emb = self.deep_set(x_feat_diff, x_feat_valid)
 
-        y = flatten_and_concat(y_state, y_cov, y_traj, y_feat_emb)
+        y_next = self.encoder(x_action, self.x_hidden)
+
+        y = flatten_and_concat(y_state, y_cov, y_traj, y_feat_emb, y_next)
         # y = min_max_scaling(x, self.observation_space)  # type: ignore
         return y
 
