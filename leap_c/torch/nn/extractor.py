@@ -168,6 +168,8 @@ class QuadrotorExtractor(Extractor):
         y_feat_emb = self.deep_set(x_feat_diff, x_feat_valid)
 
         y_next = self.encoder(x_action, self.x_hidden)
+        assert y_next.shape[0] == 1
+        y_next = y_next[0,:] # first dimension is one, second is batch
 
         y = flatten_and_concat(y_state, y_cov, y_traj, y_feat_emb, y_next)
         # y = min_max_scaling(x, self.observation_space)  # type: ignore
